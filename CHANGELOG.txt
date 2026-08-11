@@ -1,0 +1,34 @@
+2026-08-02 v1.0
+
+  修复:
+  - pdf_loader.py: load_pdf() 函数内硬编码路径改为使用传入的 path 参数
+  - document/_init__.py 重命名为 __init__.py，修复包导入失败问题
+  - data/test.pdf 从空文件替换为真实 PDF（D:\test.pdf 周杰伦介绍文档，159KB）
+  - .gitignore: env → .env（修正环境变量文件名匹配）
+  - requirements.txt: 补全依赖清单（PyMuPDF / python-dotenv / requests）
+
+  新增:
+  - README.md: 项目说明文档
+  - CHANGELOG.txt: 变更记录
+
+2026-08-11 v2.0（代码整理）
+
+  变更:
+  - 归档遗留代码到 archive/：pdf_loader.py、word_loader.py、document/chunker.py、rag/vector_store.py、llm/embedding.py、旧版 main 备份、运行日志
+  - requirements.txt 补全 python-docx、sentence-transformers
+  - 新增 .env.example 配置示例
+  - .gitignore 排除 chroma_db/、data/、archive/、日志等运行时文件
+  - README 更新为当前完整 RAG 架构
+
+2026-08-11 v2.1（修复）
+
+  修复:
+  - 移除 rag/store.py 的全局去重逻辑（dedup_store）：跨文档内容去重会让重复上传的文档 0 片段入库，导致"向量库中没有检索到相关内容"
+  - 清理 chroma_db 中残留的 dedup_store 集合
+
+2026-08-11 v2.2（修复）
+
+  修复:
+  - .env 中 LLM_API_KEY 被 AI 备注行吞掉导致无法解析，DeepSeek 调用 401、回答为空；已把密钥行独立还原
+  - llm/chat.py 增加 HTTP 状态码检查，API 失败不再静默
+  - rag/retriever.py 流式调用失败时向前端发送 error 事件，界面可见报错而非空气泡

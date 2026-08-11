@@ -1,67 +1,97 @@
-# RAG Assistant v1.0
+# RAG Assistant
 
-基于 DeepSeek 大模型的 RAG（检索增强生成）文档问答工具。
+基于 DeepSeek 大模型的 RAG（检索增强生成）文档问答工具：上传 PDF / DOCX / TXT，系统自动解析、切块、向量化入库；提问时语义检索最相关的片段，交由大模型流式生成带来源溯源的回答。
+
+## 功能特性
+
+- 上传 PDF / DOCX / TXT，自动解析文本、切块、向量化入库
+- 每个文档独立向量集合（collection），支持多文档管理与删除
+- 语义检索 + 流式回答（SSE）+ 命中片段溯源展示
+- 支持多轮对话（自动携带最近 10 条历史）
+- 前端 Vue 3 + Vite，后端 FastAPI
 
 ## 项目结构
 
 ```
 rag-assiant/
-├── main.py                 # 入口：读取PDF → 提问 → 调大模型 → 输出答案
-├── config.py               # 配置文件（预留）
-├── .env                    # 环境变量（API Key / Base URL / 模型名）
-├── requirements.txt        # 依赖清单
+├── main.py                 # 后端入口（FastAPI 路由）
+├── config.py               # 配置读取（.env）
 ├── document/
-│   ├── __init__.py
-│   ├── pdf_loader.py       # PDF读取模块（基于 PyMuPDF）
-│   └── word_loader.py      # Word读取模块（预留）
+│   └── loader.py           # 文档解析：PDF / DOCX / TXT
+├── rag/
+│   ├── chunker.py          # 文本切块（500 字/块，重叠 50）
+│   ├── store.py            # Chroma 向量库统一入口（增/查/删）
+│   └── retriever.py        # 检索 + 上下文拼接 + 流式生成
 ├── llm/
-│   ├── __init__.py
-│   └── chat.py             # 大模型调用模块（DeepSeek API）
-└── data/
-    └── test.pdf            # 测试用PDF文档
+│   └── chat.py             # DeepSeek 对话（普通 / 流式）
+└── frontend/               # Vue 3 + Vite 前端
+    └── src/
+        ├── api.js          # 接口封装（含 SSE 流式解析）
+        └── components/     # Upload / Chat / Source
 ```
 
 ## 工作流程
 
-```
-PDF文件 → pdf_loader提取文本 → 拼接prompt → DeepSeek API → 返回答案
-```
+### 文档入库
 
-1. `pdf_loader.load_pdf(path)` 用 PyMuPDF 读取 PDF 全部文本
-2. `chat.ask_llm(document_text, question)` 将文档文本 + 用户问题拼成 prompt，调用 DeepSeek Chat API
-3. 为防止超长，文档文本截取前 6000 字符
+上传文件 → 保存到 `data/` → 解析成纯文本 → 切块（500 字，重叠 50）→ 本地 bge 模型向量化 → 写入 Chroma（每个文档一个 `doc_{id}` 集合）→ 后台异步生成摘要。
+
+### 问答
+
+用户提问 → 按 `doc_id` 定位集合 → 问题向量化 → 语义检索 top_k 片段 → 拼接上下文与最近 10 条历史 → DeepSeek 流式生成 → SSE 推送 token，前端打字机展示，并折叠展示命中来源。
 
 ## 环境配置
 
-`.env` 文件内容：
+复制 `.env.example` 为 `.env` 并填写（`.env` 已加入 .gitignore，不会提交）：
 
 ```
+# DeepSeek 对话
 LLM_API_KEY=sk-xxx
 LLM_BASE_URL=https://api.deepseek.com/v1
 LLM_MODEL=deepseek-chat
+
+# RAG 参数
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
+TOP_K=5
+
+# 服务与存储
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8083
+CHROMA_DB_PATH=./chroma_db
+UPLOAD_DIR=data
 ```
 
-## 依赖安装
-
-```
-pip install PyMuPDF python-dotenv requests
-```
+> 向量化默认使用本地 sentence-transformers 模型 `BAAI/bge-small-zh-v1.5`，首次运行会自动下载（约 100MB+）。
 
 ## 运行方式
 
-```
+```bash
+# 后端
+pip install -r requirements.txt
 python main.py
+
+# 前端（另开终端）
+cd frontend
+npm install
+npm run dev
 ```
+
+浏览器打开 Vite 提示的地址（默认 http://localhost:5173），即可上传文档并提问。
 
 ## 技术栈
 
 | 组件 | 技术 |
 |------|------|
-| PDF解析 | PyMuPDF (fitz) |
-| 大模型 | DeepSeek Chat API |
-| HTTP请求 | requests |
-| 环境变量 | python-dotenv |
+| 后端 | FastAPI / Uvicorn |
+| 前端 | Vue 3 / Vite |
+| 文档解析 | PyMuPDF / python-docx |
+| 切块 | langchain-text-splitters |
+| 向量库 | ChromaDB（持久化） |
+| 向量模型 | BAAI/bge-small-zh-v1.5（本地） |
+| 生成模型 | DeepSeek Chat API |
 
 ## 版本记录
 
-- **v1.0** (2026-08-02)：初始版本，实现 PDF 读取 + DeepSeek 问答基础链路
+- **v1.0** (2026-08-02)：PDF 读取 + DeepSeek 问答基础链路
+- **v2.0** (2026-08-11)：完整 RAG 架构（切块 / 向量库 / 流式问答 / 前端），整理归档遗留代码

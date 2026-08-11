@@ -1,6 +1,13 @@
-env
+.env
 .venv/
 .idea/
 __pycache__/
 *.pyc
 *.log
+
+# 运行时数据（不入库）
+chroma_db/
+data/
+archive/
+err.txt
+out.txt
