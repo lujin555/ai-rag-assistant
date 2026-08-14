@@ -10,23 +10,17 @@ BASE_URL = os.getenv("LLM_BASE_URL")
 MODEL_NAME = os.getenv("LLM_MODEL")
 
 
-def _build_prompt(context: str, question: str, history: list = None) -> str:
-    history_block = ""
-    if history:
-        lines = ["【历史对话】"]
-        for msg in history[-10:]:  # 最多保留最近 10 条
-            role = "用户" if msg["role"] == "user" else "助手"
-            lines.append(f"{role}: {msg['content']}")
-        lines.append("")
-        history_block = "\n".join(lines)
+SYSTEM_PROMPT = "请只根据下面提供的文档内容回答用户问题，如果文档没有相关信息就如实说明。"
 
-    return f"""请只根据下面提供的文档内容回答用户问题，如果文档没有相关信息就如实说明。
-{history_block}
-【文档内容】
-{context}
-【用户问题】
-{question}
-    """
+def _build_messages(context, question, history=None):
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]   # 规则放 system
+    if history:
+        messages.extend(history[-10:])                          # 历史直接原样塞进来
+    messages.append({
+        "role": "user",
+        "content": f"【文档内容】\n{context}\n【用户问题】\n{question}",  # 文档+问题放最后一条
+    })
+    return messages
 
 
 def ask_llm(context: str, question: str, history: list = None):
@@ -36,10 +30,9 @@ def ask_llm(context: str, question: str, history: list = None):
     history：历史对话列表 [{role, content}, ...]
     return：大模型回答
     """
-    prompt = _build_prompt(context, question, history)
     payload = {
         "model": MODEL_NAME,
-        "messages": [{"role": "user", "content": prompt}]
+        "messages": _build_messages(context, question, history),  # ← 用新函数
     }
     headers = {
         "Authorization": f"Bearer {API_KEY}",
@@ -57,10 +50,10 @@ def ask_llm_stream(context: str, question: str, history: list = None):
     """
     流式版本，逐个 yield token 字符串。
     """
-    prompt = _build_prompt(context, question, history)
+
     payload = {
         "model": MODEL_NAME,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": _build_messages(context, question, history),
         "stream": True
     }
     headers = {
