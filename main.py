@@ -64,6 +64,12 @@ class ChatRequest(BaseModel):
     history: list = []
 
 
+class RetrieveRequest(BaseModel):
+    question: str
+    doc_id: str = ""
+    top_k: int = 3
+
+
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...), background_tasks: BackgroundTasks = BackgroundTasks()):
     if not file.filename:
@@ -154,6 +160,33 @@ async def chat(req: ChatRequest):
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/api/retrieve")
+async def retrieve(req: RetrieveRequest):
+    """纯检索接口：给 Agent 当工具用，不生成回答。"""
+    collection_name = None
+    if req.doc_id and req.doc_id in documents:
+        collection_name = documents[req.doc_id]["collection_name"]
+    elif documents:
+        collection_name = list(documents.values())[0]["collection_name"]
+    if not collection_name:
+        return {"code": 200, "data": []}
+
+    collection = get_collection(collection_name)
+    if collection is None:
+        return {"code": 200, "data": []}
+
+    results = collection.query(query_texts=[req.question], n_results=req.top_k)
+    docs = results.get("documents", [[]])[0]
+    metas = results.get("metadatas", [[]])[0]
+    data = []
+    for i, content in enumerate(docs):
+        data.append({
+            "content": content,
+            "source": metas[i].get("source", "") if i < len(metas) else "",
+        })
+    return {"code": 200, "data": data}
 
 
 @app.get("/api/documents")
